@@ -17,6 +17,8 @@ use std::{
     io::{BufRead, BufReader, Write}
 };
 
+pub mod auth;
+
 const CLIENT_ID: &str = "CO0m-UAASpcd25xiQdi30g";
 const AUTH_URL: &str = "https://www.reddit.com/api/v1/authorize"; 
 const TOKEN_URL: &str = "https://www.reddit.com/api/v1/access_token";
@@ -88,7 +90,7 @@ pub fn oauth_process() {
             }
 
             //let message = "<html><body><h1>Go back to your terminal</h1></body></html>";
-            let message = fs::read_to_string("src/api/oauth-complete.html").expect("Failed to read HTML to string.");
+            let message = fs::read_to_string("src/auth/oauth-complete.html").expect("Failed to read HTML to string.");
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n{}",
                 message.len(),
@@ -114,11 +116,12 @@ pub fn oauth_process() {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::oauth_process;
+//
+//     #[test]
+//     fn debug_oauth_flow() {
+//         oauth_process();
+//     }
+// }
