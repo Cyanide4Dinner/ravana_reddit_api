@@ -5,6 +5,7 @@ use oauth2::{
     basic::BasicClient,
     ClientId,
     CsrfToken,
+    reqwest::async_http_client,
     reqwest::http_client,
     RefreshToken,
     RedirectUrl,
@@ -20,18 +21,18 @@ use std::{
 
 use super::{ get_scope_value, Scope  as RedditScope, OauthFlowError, Url::{ AUTH_URL, TOKEN_URL } };
 
-pub struct Client {
+pub struct OauthClient {
     client: BasicClient,
     pub access_token: Option<AccessToken>,
     pub refresh_token: Option<RefreshToken>,
 }
 
-impl Client {
+impl OauthClient {
     pub fn new(
         client_id: &str,
         redirect_url: &str,
     ) -> Self {
-        Client {
+        OauthClient {
             client: BasicClient::new(
                         ClientId::new(client_id.to_string()),
                         None,
@@ -55,7 +56,7 @@ impl Client {
         auth_req.url()
     }
 
-    pub fn oauth_flow(&mut self,
+    pub async fn oauth_flow(&mut self,
                       csrf: oauth2::CsrfToken,
                       success_message: String) -> Result<(), OauthFlowError> {
         let redirect_url: &Url = self.client.redirect_url().
@@ -122,7 +123,7 @@ impl Client {
                     return Err(OauthFlowError::StateMismatch(state.secret().clone(), csrf.secret().clone()))
                 }
 
-                let token_response = self.client.exchange_code(code).request(http_client)
+                let token_response = self.client.exchange_code(code).request_async(async_http_client).await
                     .map_err(|e| { OauthFlowError::TokenExchangeError(e.to_string()) })?;
 
                 self.access_token = Some(token_response.access_token().clone());
@@ -135,10 +136,12 @@ impl Client {
         Err(OauthFlowError::Failure("Failed to complete Oauth 2.0 flow".to_string()))
     }
 
-    pub fn refresh_access_token(&mut self) 
+    pub async fn refresh_access_token(&mut self) 
             -> Result<(), OauthFlowError> {
         if let Some(refresh_token) = &self.refresh_token {
-            let token_response = self.client.exchange_refresh_token(&refresh_token).request(http_client)
+            let token_response = self.client.exchange_refresh_token(&refresh_token)
+                .request_async(async_http_client)
+                .await
                 .map_err(|e| { OauthFlowError::TokenExchangeError(e.to_string()) })?;
             self.access_token = Some(token_response.access_token().clone());
             Ok(())
@@ -152,26 +155,21 @@ impl Client {
 mod tests {
     use anyhow::Result;
     use super::{ http_client, RedditScope, OauthFlowError };
-    use super::Client;
+    use super::OauthClient;
 
     const CLIENT_ID: &str = "CO0m-UAASpcd25xiQdi30g";
     const REDIRECT_URL: &str = "http://localhost:5555";
 
-    #[test]
-    #[ignore]
-    fn debug_oauth_flow() -> Result<(), OauthFlowError> {
-        let mut client = Client::new(CLIENT_ID, REDIRECT_URL);
+    #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+    async fn debug_oauth_flow() -> Result<()> {
+        let mut client = OauthClient::new(CLIENT_ID, REDIRECT_URL);
         let (auth_url, csrf_tok) = client.oauth_url(vec!(RedditScope::Read));
         println!("Go to URL: {}", auth_url);
-        client.oauth_flow(csrf_tok, "<html><body><h1>Success</h1></body></html>".to_string())?;
+        client.oauth_flow(csrf_tok, "<html><body><h1>Success</h1></body></html>".to_string()).await?;
         println!("Received access token: {}, refresh token: {}",
                  client.access_token.ok_or(OauthFlowError::NoRefreshTokenReceived)?.secret(),
                  client.refresh_token.ok_or(OauthFlowError::NoRefreshTokenReceived)?.secret()
         );
-        let prev_access_token = client.access_token;
-        client.refresh_access_token()?;
-        println!("Prev token: {:?}, New token: {:?}", prev_access_token, client.access_token);
-
         Ok(())
 
         // let client = get_oauth_client(CLIENT_ID, REDIRECT_URL);
