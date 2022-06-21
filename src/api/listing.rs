@@ -41,9 +41,15 @@ pub struct ListingRequest {
     t: Option<SortTime>
 }
 
-macro_rules! extract_string_from_json {
-    ($a: expr) => {
-        $a.as_str().ok_or(Error::InternalError("Failed to parse to string.".to_string()))?.to_string()
+macro_rules! extract_string_with_default {
+    ($a: expr, $b: expr) => {
+        $a.as_str().map_or_else(|| { String::new() }, |v| { v.to_string() })
+    }
+}
+
+macro_rules! extract_string_with_error {
+    ($a: expr, $b: expr) => {
+        $a.as_str().ok_or(Error::InternalError(format!("Failed to parse to string: {}", $b)))?.to_string()
     }
 }
 
@@ -122,17 +128,20 @@ impl Request<Listing> for ListingRequest {
         )?;
 
         let listing = Listing {
-            after: extract_string_from_json!(v["data"]["after"]),
-            before: extract_string_from_json!(v["data"]["before"]),
+            after: extract_string_with_default!(v["data"]["after"], "data.after"),
+            before: extract_string_with_default!(v["data"]["before"], "data.before"),
             posts: Result::<Vec<Post>, Error>::from_iter::<Vec<Result<Post, Error>>>(
                 v["data"]["children"].as_array()
                 .ok_or(Error::InternalError("Can't convert to vector".to_string()))?
                 .into_iter()
                 .map(|v_post| -> Result<Post, Error> { 
                     Ok(Post { 
-                        subreddit: extract_string_from_json!(v_post["data"]["subreddit"]),
-                        title: extract_string_from_json!(v_post["data"]["title"]),
-                        selftext: extract_string_from_json!(v_post["data"]["selftext"]) 
+                        subreddit: extract_string_with_error!(v_post["data"]["subreddit"], "data.subreddit"),
+                        title: extract_string_with_error!(v_post["data"]["title"], "data.title"),
+                        selftext: extract_string_with_error!(v_post["data"]["selftext"], "data.selftext"),
+                        score: v_post["data"]["score"].as_u64()
+                            .ok_or(Error::InternalError(
+                                    format!("Failed to parse to u64: {}", "data.score")))?
                     }) 
                 })
                 .collect())?
@@ -149,7 +158,8 @@ impl Request<Listing> for ListingRequest {
 pub struct Post {
     pub subreddit: String,
     pub title: String,
-    pub selftext: String
+    pub selftext: String,
+    pub score: u64
 }
 
 #[derive(Default, Debug)]
@@ -214,6 +224,7 @@ impl ListingRequestBuilder {
     fn limit(mut self, limit: u32) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Top,
+                             ListingType::Hot,
                              ListingType::New,
                              ListingType::Best,
                              ListingType::Rising,
@@ -270,14 +281,14 @@ mod tests {
             "Linux:ravana:cyanide4dinner"
         )?;
 
-        reddit_client.oauth_client.refresh_access_token().await.map_err(|e| { Error::Failure(e.to_string()) })?;
+        reddit_client.oauth_client.refresh_access_token().await.map_err(|e| { Error::InternalError(e.to_string()) })?;
 
-        ListingRequestBuilder::new("rust", ListingType::New)
+        ListingRequestBuilder::new("rust", ListingType::Hot)
             .limit(1)?
             .build()
             .send(&reddit_client).await?;
 
-        println!("Access token: {}", reddit_client.oauth_client.access_token.ok_or(Error::Failure("No access token".to_string()))?.secret());
+        println!("Access token: {}", reddit_client.oauth_client.access_token.ok_or(Error::InternalError("No access token".to_string()))?.secret());
 
         Ok(())
     }
