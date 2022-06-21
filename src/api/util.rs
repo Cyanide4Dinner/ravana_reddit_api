@@ -16,7 +16,7 @@ impl RedditClient {
         redirect_url: &str,
         refresh_token: &str,
         user_agent: &str,
-        ) -> Result<Self, RequestError> {
+        ) -> Result<Self, Error> {
         let mut oauth_client = OauthClient::new(client_id, redirect_url);
         oauth_client.refresh_token = Some(
             RefreshToken::new(refresh_token.to_string())
@@ -26,29 +26,33 @@ impl RedditClient {
         Ok(RedditClient {
             oauth_client,
             http_client: HTTPClient::builder().user_agent(user_agent).build()
-                .map_err(|e| { RequestError::Failure(e.to_string()) })?
+                .map_err(|e| { 
+                    Error::InternalError(format!("Failed to build HTTP client from builder: {:?}.",
+                                                 e)) })?
         })
     }
 }
 
 #[derive(Error, Debug)]
-pub enum RequestError {
-    #[error("Error building request: {0}")]
-    HTTPRequestBuildError(String),
+pub enum Error {
+    // For errors that occur because of internal fault in the library.
+    #[error("Internal error in library: {0}")]
+    InternalError(String),
 
-    #[error("Failure: {0}")]
-    Failure(String)
+    // For all the requesting sending, response receiving and internet errors that may arise.
+    #[error("Error occurred while sending request / receiving response: {0}")]
+    RequestError(String),
+
+    // Errors arising to invalid assertions on values or use of library functions or structures by user.
+    #[error("Error: {0}")]
+    UserError(String)
 }
-
-#[derive(Error, Debug)]
-#[error("Invalid parameters for request builder.")]
-pub struct InvalidRequestBuilderParamsError;
 
 #[async_trait]
 pub trait Request<S> {
-    fn get_filled_builder(&self, client: &RedditClient) -> Result<HTTPRequestBuilder, RequestError>;
-    fn construct(&self, client: &RedditClient) -> Result<HTTPRequest, RequestError>;
-    async fn send(&self, client: &RedditClient) -> Result<S, RequestError>;
+    fn get_filled_builder(&self, client: &RedditClient) -> Result<HTTPRequestBuilder, Error>;
+    fn construct(&self, client: &RedditClient) -> Result<HTTPRequest, Error>;
+    async fn send(&self, client: &RedditClient) -> Result<S, Error>;
 }
 
 pub trait RequestBuilder<R: Clone> {

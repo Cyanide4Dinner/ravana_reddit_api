@@ -5,11 +5,11 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::util::{ Request, RequestBuilder, RequestError, InvalidRequestBuilderParamsError };
+use super::util::{ Request, RequestBuilder, Error };
 use crate::REDDIT_API_URL;
 use super::util::RedditClient;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ListingType {
     Hot,
     New,
@@ -43,7 +43,7 @@ pub struct ListingRequest {
 
 #[async_trait]
 impl Request<Listing> for ListingRequest {
-    fn get_filled_builder(&self, client: &RedditClient) -> Result<HTTPRequestBuilder, RequestError> {
+    fn get_filled_builder(&self, client: &RedditClient) -> Result<HTTPRequestBuilder, Error> {
         let mut query_params: Vec<(&str, &str)> = Vec::new();
 
         if let Some(after_str) = &self.after {
@@ -92,33 +92,33 @@ impl Request<Listing> for ListingRequest {
             .get(format!("{}r/{}/{}", REDDIT_API_URL, self.subreddit, listing_string))
             .bearer_auth(
                 client.oauth_client.access_token.clone().ok_or(
-                    RequestError::HTTPRequestBuildError("No access token found.".to_string())
+                    Error::InternalError("No access token found in oauth_client.".to_string())
                     )?.secret())
             .query(&query_params))
     }
 
-    fn construct(&self, client: &RedditClient) -> Result<HTTPRequest, RequestError> {
+    fn construct(&self, client: &RedditClient) -> Result<HTTPRequest, Error> {
         self.get_filled_builder(client)?
             .build()
-            .map_err(|e| { RequestError::HTTPRequestBuildError(e.to_string()) }) 
+            .map_err(|e| { Error::InternalError(format!("Failed to build Request from builder: {:?}", e)) }) 
     }
 
-    async fn send(&self, client: &RedditClient) -> Result<Listing, RequestError> {
+    async fn send(&self, client: &RedditClient) -> Result<Listing, Error> {
         let res = self.get_filled_builder(client)?
             .send()
             .await
-            .map_err(|e| { RequestError::Failure(e.to_string()) })?;
+            .map_err(|e| { Error::RequestError(format!("Error occurred while sending request: {:?}", e)) })?;
 
         // TODO: Better error handling.
-        let v: Value = serde_json::from_str(&res.text().await.map_err(|e| { RequestError::Failure(e.to_string()) })?).map_err(
-            |e| { RequestError::Failure(e.to_string()) }
+        let v: Value = serde_json::from_str(&res.text().await.map_err(|e| { Error::InternalError(e.to_string()) })?).map_err(
+            |e| { Error::InternalError(e.to_string()) }
         )?;
 
         let listing = Listing {
-            after: v["data"]["after"].as_str().ok_or(RequestError::Failure("Failed".to_string()))?.to_string(),
+            after: v["data"]["after"].as_str().ok_or(Error::InternalError("Failed".to_string()))?.to_string(),
             before: v["data"]["before"].to_string(),
             posts: v["data"]["children"].as_array()
-                .ok_or(RequestError::Failure("Can't convert to vector".to_string()))?
+                .ok_or(Error::InternalError("Can't convert to vector".to_string()))?
                 .into_iter()
                 .map(|v_post| { 
                     Post { 
@@ -130,7 +130,7 @@ impl Request<Listing> for ListingRequest {
                 .collect()
         };
 
-        // println!("{}", res.text().await.map_err(|e| { RequestError::Failure(e.to_string()) })?);
+        // println!("{}", res.text().await.map_err(|e| { Error::Failure(e.to_string()) })?);
         println!("{:?}", listing);
 
         Ok(listing)
@@ -159,7 +159,7 @@ macro_rules! assert_listing_type {
     ($a: expr, $( $lt: path ),+) => {
         match $a {
             $($lt => {  },)+
-            _ => { return Err(InvalidRequestBuilderParamsError); }
+            _ => { return Err(Error::UserError(format!("Invalid listing type: {:?}", $a))); }
         };
     }
 }
@@ -179,7 +179,7 @@ impl ListingRequestBuilder {
         }
     }
 
-    fn after(mut self, after: String) -> Result<Self, InvalidRequestBuilderParamsError> {
+    fn after(mut self, after: String) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Top,
                              ListingType::New,
@@ -191,7 +191,7 @@ impl ListingRequestBuilder {
         Ok(self)
     }
 
-    fn before(mut self, before: String) -> Result<Self, InvalidRequestBuilderParamsError> {
+    fn before(mut self, before: String) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Top,
                              ListingType::New,
@@ -203,7 +203,7 @@ impl ListingRequestBuilder {
         Ok(self)
     }
 
-    fn limit(mut self, limit: u32) -> Result<Self, InvalidRequestBuilderParamsError> {
+    fn limit(mut self, limit: u32) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Top,
                              ListingType::New,
@@ -215,7 +215,7 @@ impl ListingRequestBuilder {
         Ok(self)
     }
 
-    fn g(mut self, g: String) -> Result<Self, InvalidRequestBuilderParamsError> {
+    fn g(mut self, g: String) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Best
                              );
@@ -223,7 +223,7 @@ impl ListingRequestBuilder {
         Ok(self)
     }
 
-    fn t(mut self, sort_time: SortTime) -> Result<Self, InvalidRequestBuilderParamsError> {
+    fn t(mut self, sort_time: SortTime) -> Result<Self, Error> {
         assert_listing_type!(self.req.listing_type,
                              ListingType::Top,
                              ListingType::Controversial
@@ -262,14 +262,14 @@ mod tests {
             "Linux:ravana:cyanide4dinner"
         )?;
 
-        reddit_client.oauth_client.refresh_access_token().await.map_err(|e| { RequestError::Failure(e.to_string()) })?;
+        reddit_client.oauth_client.refresh_access_token().await.map_err(|e| { Error::Failure(e.to_string()) })?;
 
         ListingRequestBuilder::new("rust", ListingType::New)
             .limit(1)?
             .build()
             .send(&reddit_client).await?;
 
-        println!("Access token: {}", reddit_client.oauth_client.access_token.ok_or(RequestError::Failure("No access token".to_string()))?.secret());
+        println!("Access token: {}", reddit_client.oauth_client.access_token.ok_or(Error::Failure("No access token".to_string()))?.secret());
 
         Ok(())
     }
