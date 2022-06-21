@@ -41,6 +41,12 @@ pub struct ListingRequest {
     t: Option<SortTime>
 }
 
+macro_rules! extract_string_from_json {
+    ($a: expr) => {
+        $a.as_str().ok_or(Error::InternalError("Failed to parse to string.".to_string()))?.to_string()
+    }
+}
+
 #[async_trait]
 impl Request<Listing> for ListingRequest {
     fn get_filled_builder(&self, client: &RedditClient) -> Result<HTTPRequestBuilder, Error> {
@@ -110,24 +116,26 @@ impl Request<Listing> for ListingRequest {
             .map_err(|e| { Error::RequestError(format!("Error occurred while sending request: {:?}", e)) })?;
 
         // TODO: Better error handling.
-        let v: Value = serde_json::from_str(&res.text().await.map_err(|e| { Error::InternalError(e.to_string()) })?).map_err(
+        let v: Value = serde_json::from_str(&res.text().await.map_err(
+                |e| { Error::InternalError(e.to_string()) })?).map_err(
             |e| { Error::InternalError(e.to_string()) }
         )?;
 
         let listing = Listing {
-            after: v["data"]["after"].as_str().ok_or(Error::InternalError("Failed".to_string()))?.to_string(),
-            before: v["data"]["before"].to_string(),
-            posts: v["data"]["children"].as_array()
+            after: extract_string_from_json!(v["data"]["after"]),
+            before: extract_string_from_json!(v["data"]["before"]),
+            posts: Result::<Vec<Post>, Error>::from_iter::<Vec<Result<Post, Error>>>(
+                v["data"]["children"].as_array()
                 .ok_or(Error::InternalError("Can't convert to vector".to_string()))?
                 .into_iter()
-                .map(|v_post| { 
-                    Post { 
-                        subreddit: v_post["data"]["subreddit"].to_string(),
-                        title: v_post["data"]["title"].to_string(),
-                        selftext: v_post["data"]["selftext"].to_string() 
-                    } 
+                .map(|v_post| -> Result<Post, Error> { 
+                    Ok(Post { 
+                        subreddit: extract_string_from_json!(v_post["data"]["subreddit"]),
+                        title: extract_string_from_json!(v_post["data"]["title"]),
+                        selftext: extract_string_from_json!(v_post["data"]["selftext"]) 
+                    }) 
                 })
-                .collect()
+                .collect())?
         };
 
         // println!("{}", res.text().await.map_err(|e| { Error::Failure(e.to_string()) })?);
