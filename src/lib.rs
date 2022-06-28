@@ -18,6 +18,9 @@ use std::{
 };
 
 pub mod auth;
+pub mod api;
+
+pub const REDDIT_API_URL: &str = "https://oauth.reddit.com/";
 
 const CLIENT_ID: &str = "CO0m-UAASpcd25xiQdi30g";
 const AUTH_URL: &str = "https://www.reddit.com/api/v1/authorize"; 
