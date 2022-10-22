@@ -1,2 +1,4 @@
+mod util;
+
 pub mod listing;
-pub mod util;
+pub use util::RedditClient;
