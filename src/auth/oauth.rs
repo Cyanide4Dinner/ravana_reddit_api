@@ -1,12 +1,12 @@
 use oauth2::{
     AccessToken,
     AuthorizationCode,
+    AuthType,
     AuthUrl,
     basic::BasicClient,
     ClientId,
     CsrfToken,
     reqwest::async_http_client,
-    reqwest::http_client,
     RefreshToken,
     RedirectUrl,
     Scope,
@@ -19,7 +19,7 @@ use std::{
     io::{ BufRead, BufReader, Write }
 };
 
-use super::{ get_scope_value, Scope  as RedditScope, OauthFlowError, Url::{ AUTH_URL, TOKEN_URL } };
+use super::{ get_scope_value, Scope  as RedditScope, OauthFlowError, url::{ AUTH_URL, TOKEN_URL } };
 
 pub struct OauthClient {
     client: BasicClient,
@@ -38,7 +38,7 @@ impl OauthClient {
                         None,
                         AuthUrl::new(AUTH_URL.to_string()).expect("Cannot set Auth URL."),
                         Some(TokenUrl::new(TOKEN_URL.to_string()).expect("Cannot set Token URL"))
-                    ).set_redirect_uri(
+                    ).set_auth_type(AuthType::BasicAuth).set_redirect_uri(
                         RedirectUrl::new(redirect_url.to_string()).expect("Invalid redirect URL")
             ),
             access_token: None,
@@ -59,15 +59,19 @@ impl OauthClient {
     pub async fn oauth_flow(&mut self,
                       csrf: oauth2::CsrfToken,
                       success_message: String) -> Result<(), OauthFlowError> {
-        let redirect_url: &Url = self.client.redirect_url().
-            ok_or(OauthFlowError::Failure("No redirect_url set for client.".to_string()))?.url(); 
+        // let redirect_url: &Url = self.client.redirect_url.
+        //     ok_or(OauthFlowError::Failure("No redirect_url set for client.".to_string()))?.url();
 
-        let tcp_red_url = 
-                redirect_url.host_str()
-                    .ok_or(OauthFlowError::TcpListenerError("Cannot get host.".to_string()))?.to_string()
-                + ":" +
-                &redirect_url.port()
-                    .ok_or(OauthFlowError::TcpListenerError("Cannot get port".to_string()))?.to_string();
+        // let tcp_red_url =
+        //         redirect_url.host_str()
+        //             .ok_or(OauthFlowError::TcpListenerError("Cannot get host.".to_string()))?.to_string()
+        //         + ":" +
+        //         &redirect_url.port()
+        //             .ok_or(OauthFlowError::TcpListenerError("Cannot get port".to_string()))?.to_string();
+
+        let tcp_red_url = "localhost:5555".to_string();
+
+        println!("TCP url is {}.", tcp_red_url);
 
         let listener = TcpListener::bind(tcp_red_url).map_err(|e| { 
             OauthFlowError::TcpListenerError(e.to_string())
@@ -123,6 +127,8 @@ impl OauthClient {
                     return Err(OauthFlowError::StateMismatch(state.secret().clone(), csrf.secret().clone()))
                 }
 
+                println!("Code is: {}", code.secret());
+
                 let token_response = self.client.exchange_code(code).request_async(async_http_client).await
                     .map_err(|e| { OauthFlowError::TokenExchangeError(e.to_string()) })?;
 
@@ -154,10 +160,10 @@ impl OauthClient {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use super::{ http_client, RedditScope, OauthFlowError };
+    use super::{ RedditScope, OauthFlowError };
     use super::OauthClient;
 
-    const CLIENT_ID: &str = "CO0m-UAASpcd25xiQdi30g";
+    const CLIENT_ID: &str = "znL1Gj0B5rXi4gyCdmCBwg";
     const REDIRECT_URL: &str = "http://localhost:5555";
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
@@ -171,26 +177,19 @@ mod tests {
                  client.refresh_token.ok_or(OauthFlowError::NoRefreshTokenReceived)?.secret()
         );
         Ok(())
-
-        // let client = get_oauth_client(CLIENT_ID, REDIRECT_URL);
-        // let (auth_url, csrf_tok) = get_oauth_url(
-        //     &client,
-        //     vec!(RedditScope::Read)
-        // );
-        //
-        // println!("Go to URL: {}", auth_url);
-        // let (access_tok, refresh_tok) = oauth_flow(&client, csrf_tok, "<html><body><h1>Success</h1></body></html>".to_string())?;
-        // println!("Received access token: {}, refresh token: {}", access_tok.secret(), refresh_tok.secret());
-        // Ok(())
     }
 
-    // #[test]
-    // #[ignore]
-    // fn debug_exchange_refresh_token() -> Result<()> {
-    //     let refresh_token = oauth2::RefreshToken::new("166788405649-KAGh3f8GQr6_BQdiHZj2Eys8viPHdQ".to_string());
-    //     let client = get_oauth_client(CLIENT_ID, REDIRECT_URL);
-    //     let token_response = client.exchange_refresh_token(&refresh_token).request(http_client)?;
-    //     println!("New access token got: {}", token_response.access_token().secret());
-    //     Ok(())
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+    async fn debug_exchange_refresh_token() -> Result<()> {
+        let refresh_token = oauth2::RefreshToken::new("2303436387124-OQI1VA8iBWjCKvlqPm24NDKJa0M0Sg".to_string());
+        let mut client = OauthClient::new(CLIENT_ID, REDIRECT_URL);
+        client.refresh_token = Some(refresh_token);
+        client.refresh_access_token().await?;
+        if let Some(access_token) = client.access_token {
+            println!("New access token got: {}", access_token.secret());
+        } else {
+            println!("No access token!");
+        }
+        Ok(())
+    }
 }

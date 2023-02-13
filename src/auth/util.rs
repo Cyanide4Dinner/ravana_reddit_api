@@ -1,11 +1,11 @@
 use thiserror::Error;
 
-pub mod Url {
+pub mod url {
     pub const AUTH_URL  : &str = "https://www.reddit.com/api/v1/authorize"; 
     pub const TOKEN_URL : &str = "https://www.reddit.com/api/v1/access_token";
 }
 
-pub(super) mod ScopeValue {
+pub(super) mod scope_value {
     pub const IDENTITY_SCOPE        : &str = "identity";
     pub const EDIT_SCOPE            : &str = "edit";
     pub const FLAIR_SCOPE           : &str = "flair";
@@ -52,25 +52,25 @@ pub enum Scope {
 
 pub fn get_scope_value(scope: Scope) -> String {
     match scope {
-        Scope::Identity => ScopeValue::IDENTITY_SCOPE.to_string(),
-        Scope::Edit => ScopeValue::EDIT_SCOPE.to_string(),
-        Scope::Flair => ScopeValue::FLAIR_SCOPE.to_string(),
-        Scope::History => ScopeValue::HISTORY_SCOPE.to_string(),
-        Scope::ModConfig => ScopeValue::MODCONFIG_SCOPE.to_string(),
-        Scope::ModFlair => ScopeValue::MODFLAIR_SCOPE.to_string(),
-        Scope::ModLog => ScopeValue::MODLOG_SCOPE.to_string(),
-        Scope::ModPosts => ScopeValue::MODPOSTS_SCOPE.to_string(),
-        Scope::ModWiki => ScopeValue::MODWIKI_SCOPE.to_string(),
-        Scope::MySubreddits => ScopeValue::MYSUBREDDITS_SCOPE.to_string(),
-        Scope::PrivateMessages => ScopeValue::PRIVATEMESSAGES_SCOPE.to_string(),
-        Scope::Read => ScopeValue::READ_SCOPE.to_string(),
-        Scope::Report => ScopeValue::REPORT_SCOPE.to_string(),
-        Scope::Save => ScopeValue::SAVE_SCOPE.to_string(),
-        Scope::Submit => ScopeValue::SUBMIT_SCOPE.to_string(),
-        Scope::Subscribe => ScopeValue::SUBSCRIBE_SCOPE.to_string(),
-        Scope::Vote => ScopeValue::VOTE_SCOPE.to_string(),
-        Scope::WikiEdit => ScopeValue::WIKIEDIT.to_string(),
-        Scope::WikiRead => ScopeValue::WIKIREAD.to_string()
+        Scope::Identity => scope_value::IDENTITY_SCOPE.to_string(),
+        Scope::Edit => scope_value::EDIT_SCOPE.to_string(),
+        Scope::Flair => scope_value::FLAIR_SCOPE.to_string(),
+        Scope::History => scope_value::HISTORY_SCOPE.to_string(),
+        Scope::ModConfig => scope_value::MODCONFIG_SCOPE.to_string(),
+        Scope::ModFlair => scope_value::MODFLAIR_SCOPE.to_string(),
+        Scope::ModLog => scope_value::MODLOG_SCOPE.to_string(),
+        Scope::ModPosts => scope_value::MODPOSTS_SCOPE.to_string(),
+        Scope::ModWiki => scope_value::MODWIKI_SCOPE.to_string(),
+        Scope::MySubreddits => scope_value::MYSUBREDDITS_SCOPE.to_string(),
+        Scope::PrivateMessages => scope_value::PRIVATEMESSAGES_SCOPE.to_string(),
+        Scope::Read => scope_value::READ_SCOPE.to_string(),
+        Scope::Report => scope_value::REPORT_SCOPE.to_string(),
+        Scope::Save => scope_value::SAVE_SCOPE.to_string(),
+        Scope::Submit => scope_value::SUBMIT_SCOPE.to_string(),
+        Scope::Subscribe => scope_value::SUBSCRIBE_SCOPE.to_string(),
+        Scope::Vote => scope_value::VOTE_SCOPE.to_string(),
+        Scope::WikiEdit => scope_value::WIKIEDIT.to_string(),
+        Scope::WikiRead => scope_value::WIKIREAD.to_string()
     }
 }
 
